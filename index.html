@@ -3,11 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Car Wash Booking</title>
+<title>ParkWash Mobile</title>
 <style>
-body{font-family:Arial;background:#f4f4f4;margin:0;padding:20px}
+body{font-family:Arial,Helvetica,sans-serif;background:#f4f4f4;margin:0;padding:20px}
 .container{max-width:900px;margin:auto;background:#fff;padding:25px;border-radius:10px;box-shadow:0 5px 20px rgba(0,0,0,0.1)}
-h1{text-align:center}
+.logo{text-align:center;margin-bottom:10px}
+.logo svg{width:70px;height:70px}
+h1{text-align:center;margin:5px 0}
+.tag{text-align:center;color:#666;margin-bottom:20px}
 label{display:block;margin-top:12px}
 input,select,button{width:100%;padding:10px;margin-top:5px;font-size:15px}
 button{background:#000;color:#fff;border:none;cursor:pointer;margin-top:20px}
@@ -16,18 +19,40 @@ button{background:#000;color:#fff;border:none;cursor:pointer;margin-top:20px}
 .slot{padding:10px;border:1px solid #ddd;border-radius:6px;background:#fafafa;text-align:center;cursor:pointer}
 .slot.unavailable{background:#ffd6d6;border-color:#ff8a8a;cursor:not-allowed}
 .slot.selected{background:#000;color:#fff}
+.notice{text-align:center;margin-top:10px;color:#888}
 </style>
 </head>
 <body>
 
 <div class="container">
-<h1>Car Wash Booking</h1>
+
+<div class="logo">
+<svg viewBox="0 0 100 100">
+<circle cx="50" cy="50" r="45" fill="#000" />
+<text x="50" y="58" font-size="28" text-anchor="middle" fill="#fff" font-family="Arial">PW</text>
+</svg>
+</div>
+
+<h1>ParkWash Mobile</h1>
+<div class="tag">Office & Workplace Car Wash</div>
+
+<label>Booking Day</label>
+<select id="day">
+<option value="Monday">Monday</option>
+<option value="Tuesday">Tuesday</option>
+<option value="Wednesday">Wednesday</option>
+<option value="Thursday">Thursday</option>
+<option value="Friday">Friday</option>
+</select>
 
 <label>Name</label>
 <input id="name" type="text" placeholder="Customer name">
 
 <label>Email</label>
 <input id="email" type="email" placeholder="Customer email">
+
+<label>Car Registration</label>
+<input id="reg" type="text" placeholder="e.g. AB12CDE">
 
 <label>Car Size</label>
 <select id="carSize" onchange="updateUI()">
@@ -49,185 +74,211 @@ button{background:#000;color:#fff;border:none;cursor:pointer;margin-top:20px}
 <h3>Select Time</h3>
 <div id="calendar" class="grid"></div>
 
+<div class="notice">Maximum 15 cars per day</div>
+
 <button onclick="bookWash()">Book & Pay</button>
 
 </div>
 
 <script>
 
-const STORAGE_KEY = "carwashBookings";
-const SHEETS_WEBHOOK = "PASTE_GOOGLE_SCRIPT_URL_HERE";
+const STORAGE_KEY="parkwashBookings";
+const SHEETS_WEBHOOK="PASTE_GOOGLE_SCRIPT_URL_HERE";
+
+const DAILY_LIMIT=15;
 
 const prices={
- small:{outside:20,full:30},
- medium:{outside:25,full:35},
- large:{outside:30,full:40}
+small:{outside:20,full:30},
+medium:{outside:25,full:35},
+large:{outside:30,full:40}
 };
 
 const durations={
- small:{outside:30,full:45},
- medium:{outside:30,full:60},
- large:{outside:45,full:70}
+small:{outside:30,full:45},
+medium:{outside:30,full:60},
+large:{outside:45,full:70}
 };
 
 const paymentLinks={
- small:{outside:"PASTE_LINK",full:"PASTE_LINK"},
- medium:{outside:"PASTE_LINK",full:"PASTE_LINK"},
- large:{outside:"PASTE_LINK",full:"PASTE_LINK"}
+small:{outside:"PASTE_LINK",full:"PASTE_LINK"},
+medium:{outside:"PASTE_LINK",full:"PASTE_LINK"},
+large:{outside:"PASTE_LINK",full:"PASTE_LINK"}
 };
 
 let selectedStart=null;
 
 function getBookings(){
- return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]");
+return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]");
 }
 
 function saveBookings(b){
- localStorage.setItem(STORAGE_KEY,JSON.stringify(b));
+localStorage.setItem(STORAGE_KEY,JSON.stringify(b));
 }
 
 function formatTime(mins){
- const h=Math.floor(mins/60);
- const m=mins%60;
- return String(h).padStart(2,'0')+":"+String(m).padStart(2,'0');
+const h=Math.floor(mins/60);
+const m=mins%60;
+return String(h).padStart(2,'0')+":"+String(m).padStart(2,'0');
 }
 
 function updateUI(){
- updatePrice();
- generateCalendar();
+updatePrice();
+generateCalendar();
 }
 
 function updatePrice(){
- const size=document.getElementById("carSize").value;
- const service=document.getElementById("serviceType").value;
+const size=document.getElementById("carSize").value;
+const service=document.getElementById("serviceType").value;
 
- if(size && service){
-  const price=prices[size][service];
-  document.getElementById("priceDisplay").innerText="Price: £"+price;
- }
+if(size && service){
+const price=prices[size][service];
+document.getElementById("priceDisplay").innerText="Price: £"+price;
+}
 }
 
 function generateCalendar(){
 
- const calendar=document.getElementById("calendar");
- calendar.innerHTML="";
+const calendar=document.getElementById("calendar");
+calendar.innerHTML="";
 
- const size=document.getElementById("carSize").value;
- const service=document.getElementById("serviceType").value;
+const size=document.getElementById("carSize").value;
+const service=document.getElementById("serviceType").value;
+const day=document.getElementById("day").value;
 
- const bookings=getBookings();
+const bookings=getBookings();
 
- const start=9*60+30;
- const end=16*60;
+const dayBookings=bookings.filter(b=>b.day===day);
 
- let duration=0;
+if(dayBookings.length>=DAILY_LIMIT){
+calendar.innerHTML="<p>All 15 spaces for this day are booked.</p>";
+return;
+}
 
- if(size && service){
-  duration=durations[size][service];
- }
+const start=9*60+30;
+const end=16*60;
 
- for(let t=start;t<=end;t+=15){
+let duration=0;
 
-  const slot=document.createElement("div");
-  slot.className="slot";
-  slot.innerText=formatTime(t);
-  slot.dataset.time=t;
+if(size && service){
+duration=durations[size][service];
+}
 
-  let clash=false;
+for(let t=start;t<=end;t+=15){
 
-  if(duration>0){
-   const proposedEnd=t+duration;
+const slot=document.createElement("div");
+slot.className="slot";
+slot.innerText=formatTime(t);
+slot.dataset.time=t;
 
-   if(proposedEnd>end) clash=true;
+let clash=false;
 
-   for(const b of bookings){
-    if(!(proposedEnd<=b.start || t>=b.end)){
-     clash=true;
-    }
-   }
-  } else {
-   clash=true;
-  }
+if(duration>0){
+const proposedEnd=t+duration;
 
-  if(clash){
-   slot.classList.add("unavailable");
-  }else{
+if(proposedEnd>end) clash=true;
 
-   slot.addEventListener("click",function(){
+for(const b of dayBookings){
+if(!(proposedEnd<=b.start || t>=b.end)){
+clash=true;
+}
+}
+}else{
+clash=true;
+}
 
-    document.querySelectorAll(".slot").forEach(s=>s.classList.remove("selected"));
+if(clash){
+slot.classList.add("unavailable");
+}else{
 
-    slot.classList.add("selected");
+slot.addEventListener("click",function(){
 
-    selectedStart=parseInt(slot.dataset.time);
+if(dayBookings.length>=DAILY_LIMIT){
+alert("Daily limit reached");
+return;
+}
 
-   });
+selectedStart=parseInt(slot.dataset.time);
 
-  }
+document.querySelectorAll(".slot").forEach(s=>s.classList.remove("selected"));
 
-  calendar.appendChild(slot);
- }
+slot.classList.add("selected");
+
+});
+
+}
+
+calendar.appendChild(slot);
+}
 }
 
 async function sendToSheets(data){
 
- if(SHEETS_WEBHOOK==="PASTE_GOOGLE_SCRIPT_URL_HERE") return;
+if(SHEETS_WEBHOOK==="https://script.google.com/macros/s/AKfycbz3Xvf9GnRwYAZuEC24YGT9o7iuSzxhSepY9sxdT3WCrKGnBzSAFXr-sIZm_HQqG0VYlw/exec") return;
 
- try{
-
-  await fetch(SHEETS_WEBHOOK,{
-   method:"POST",
-   headers:{"Content-Type":"application/json"},
-   body:JSON.stringify(data)
-  });
-
- }catch(err){
-  console.log(err);
- }
+try{
+await fetch(SHEETS_WEBHOOK,{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify(data)
+});
+}catch(err){
+console.log(err);
+}
 
 }
 
 function bookWash(){
 
- const name=document.getElementById("name").value;
- const email=document.getElementById("email").value;
- const size=document.getElementById("carSize").value;
- const service=document.getElementById("serviceType").value;
+const name=document.getElementById("name").value;
+const email=document.getElementById("email").value;
+const reg=document.getElementById("reg").value;
+const size=document.getElementById("carSize").value;
+const service=document.getElementById("serviceType").value;
+const day=document.getElementById("day").value;
 
- if(!name||!email||!size||!service||selectedStart===null){
-  alert("Please complete all fields and select a time.");
-  return;
- }
+if(!name||!email||!reg||!size||!service||selectedStart===null){
+alert("Please complete all fields and select a time.");
+return;
+}
 
- const duration=durations[size][service];
- const end=selectedStart+duration;
+const duration=durations[size][service];
+const end=selectedStart+duration;
 
- const bookings=getBookings();
+const bookings=getBookings();
 
- bookings.push({start:selectedStart,end:end});
+const dayBookings=bookings.filter(b=>b.day===day);
 
- saveBookings(bookings);
+if(dayBookings.length>=DAILY_LIMIT){
+alert("Daily booking limit reached");
+return;
+}
 
- const bookingData={
-  name:name,
-  email:email,
-  size:size,
-  service:service,
-  start:formatTime(selectedStart),
-  end:formatTime(end),
-  price:prices[size][service]
- };
+bookings.push({day:day,start:selectedStart,end:end});
 
- sendToSheets(bookingData);
+saveBookings(bookings);
 
- const link=paymentLinks[size][service];
+const bookingData={
+name:name,
+email:email,
+registration:reg,
+size:size,
+service:service,
+day:day,
+start:formatTime(selectedStart),
+end:formatTime(end),
+price:prices[size][service]
+};
 
- if(link==="PASTE_LINK"){
-  alert("Add your payment link first");
-  return;
- }
+sendToSheets(bookingData);
 
- window.location.href=link;
+const link=paymentLinks[size][service];
+
+if(link==="PASTE_LINK"){
+alert("Add your payment link first");
+return;
+}
+
+window.location.href=link;
 
 }
 
