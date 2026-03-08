@@ -1,37 +1,36 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Car Wash Booking</title>
 <style>
-body{font-family:Arial,Helvetica,sans-serif;background:#f4f4f4;margin:0;padding:20px}
+body{font-family:Arial;background:#f4f4f4;margin:0;padding:20px}
 .container{max-width:900px;margin:auto;background:#fff;padding:25px;border-radius:10px;box-shadow:0 5px 20px rgba(0,0,0,0.1)}
-h1{text-align:center;margin-top:0}
-label{display:block;margin-top:10px}
+h1{text-align:center}
+label{display:block;margin-top:12px}
 input,select,button{width:100%;padding:10px;margin-top:5px;font-size:15px}
 button{background:#000;color:#fff;border:none;cursor:pointer;margin-top:20px}
 .price{font-size:20px;font-weight:bold;text-align:center;margin-top:15px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;margin-top:20px}
 .slot{padding:10px;border:1px solid #ddd;border-radius:6px;background:#fafafa;text-align:center;cursor:pointer}
-.slot.booked{background:#ffd6d6;border-color:#ff8a8a;cursor:not-allowed}
+.slot.unavailable{background:#ffd6d6;border-color:#ff8a8a;cursor:not-allowed}
 .slot.selected{background:#000;color:#fff}
 </style>
 </head>
-
 <body>
 
 <div class="container">
 <h1>Car Wash Booking</h1>
 
 <label>Name</label>
-<input id="name" type="text" placeholder="Customer name" />
+<input id="name" type="text" placeholder="Customer name">
 
 <label>Email</label>
-<input id="email" type="email" placeholder="Customer email" />
+<input id="email" type="email" placeholder="Customer email">
 
 <label>Car Size</label>
-<select id="carSize" onchange="updatePrice()">
+<select id="carSize" onchange="updateUI()">
 <option value="">Select</option>
 <option value="small">Small</option>
 <option value="medium">Medium</option>
@@ -39,7 +38,7 @@ button{background:#000;color:#fff;border:none;cursor:pointer;margin-top:20px}
 </select>
 
 <label>Service</label>
-<select id="serviceType" onchange="updatePrice()">
+<select id="serviceType" onchange="updateUI()">
 <option value="">Select</option>
 <option value="outside">Outside Only</option>
 <option value="full">Inside & Out</option>
@@ -57,133 +56,159 @@ button{background:#000;color:#fff;border:none;cursor:pointer;margin-top:20px}
 <script>
 
 const STORAGE_KEY = "carwashBookings";
+const SHEETS_WEBHOOK = "PASTE_GOOGLE_SCRIPT_URL_HERE";
 
-/* ADD YOUR GOOGLE SCRIPT WEBHOOK BELOW */
-const SHEETS_WEBHOOK = "https://script.google.com/macros/s/AKfycbz3Xvf9GnRwYAZuEC24YGT9o7iuSzxhSepY9sxdT3WCrKGnBzSAFXr-sIZm_HQqG0VYlw/exec";
-
-const prices = {
+const prices={
  small:{outside:20,full:30},
  medium:{outside:25,full:35},
  large:{outside:30,full:40}
 };
 
-const durations = {
+const durations={
  small:{outside:30,full:45},
  medium:{outside:30,full:60},
  large:{outside:45,full:70}
 };
 
-const paymentLinks = {
- small:{outside:"https://square.link/u/x7KmsLrd",full:"PASTE_LINK"},
+const paymentLinks={
+ small:{outside:"PASTE_LINK",full:"PASTE_LINK"},
  medium:{outside:"PASTE_LINK",full:"PASTE_LINK"},
  large:{outside:"PASTE_LINK",full:"PASTE_LINK"}
 };
 
-let selectedStart = null;
+let selectedStart=null;
 
 function getBookings(){
- return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+ return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]");
 }
 
-function saveBookings(bookings){
- localStorage.setItem(STORAGE_KEY, JSON.stringify(bookings));
+function saveBookings(b){
+ localStorage.setItem(STORAGE_KEY,JSON.stringify(b));
 }
 
 function formatTime(mins){
- const h = Math.floor(mins/60);
- const m = mins % 60;
- return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+ const h=Math.floor(mins/60);
+ const m=mins%60;
+ return String(h).padStart(2,'0')+":"+String(m).padStart(2,'0');
+}
+
+function updateUI(){
+ updatePrice();
+ generateCalendar();
 }
 
 function updatePrice(){
- const size = document.getElementById('carSize').value;
- const service = document.getElementById('serviceType').value;
+ const size=document.getElementById("carSize").value;
+ const service=document.getElementById("serviceType").value;
 
  if(size && service){
-  const price = prices[size][service];
-  document.getElementById('priceDisplay').innerText = 'Price: £' + price;
+  const price=prices[size][service];
+  document.getElementById("priceDisplay").innerText="Price: £"+price;
  }
 }
 
 function generateCalendar(){
- const calendar = document.getElementById('calendar');
- calendar.innerHTML = '';
 
- const bookings = getBookings();
+ const calendar=document.getElementById("calendar");
+ calendar.innerHTML="";
 
- const start = 9*60 + 30;
- const end = 16*60;
+ const size=document.getElementById("carSize").value;
+ const service=document.getElementById("serviceType").value;
 
- for(let t=start; t<=end; t+=15){
+ const bookings=getBookings();
 
-  const div = document.createElement('div');
-  div.className = 'slot';
-  div.dataset.time = t;
-  div.innerText = formatTime(t);
+ const start=9*60+30;
+ const end=16*60;
 
-  for(const b of bookings){
-   if(t >= b.start && t < b.end){
-    div.classList.add('booked');
+ let duration=0;
+
+ if(size && service){
+  duration=durations[size][service];
+ }
+
+ for(let t=start;t<=end;t+=15){
+
+  const slot=document.createElement("div");
+  slot.className="slot";
+  slot.innerText=formatTime(t);
+  slot.dataset.time=t;
+
+  let clash=false;
+
+  if(duration>0){
+   const proposedEnd=t+duration;
+
+   if(proposedEnd>end) clash=true;
+
+   for(const b of bookings){
+    if(!(proposedEnd<=b.start || t>=b.end)){
+     clash=true;
+    }
    }
+  } else {
+   clash=true;
   }
 
-  if(!div.classList.contains('booked')){
-   div.addEventListener('click', function(){
+  if(clash){
+   slot.classList.add("unavailable");
+  }else{
 
-    document.querySelectorAll('.slot').forEach(s=>s.classList.remove('selected'));
+   slot.addEventListener("click",function(){
 
-    div.classList.add('selected');
+    document.querySelectorAll(".slot").forEach(s=>s.classList.remove("selected"));
 
-    selectedStart = parseInt(div.dataset.time);
+    slot.classList.add("selected");
+
+    selectedStart=parseInt(slot.dataset.time);
 
    });
+
   }
 
-  calendar.appendChild(div);
+  calendar.appendChild(slot);
  }
 }
 
 async function sendToSheets(data){
 
- if(SHEETS_WEBHOOK === "https://script.google.com/macros/s/AKfycbz3Xvf9GnRwYAZuEC24YGT9o7iuSzxhSepY9sxdT3WCrKGnBzSAFXr-sIZm_HQqG0VYlw/exec") return;
+ if(SHEETS_WEBHOOK==="PASTE_GOOGLE_SCRIPT_URL_HERE") return;
 
  try{
+
   await fetch(SHEETS_WEBHOOK,{
-   method:'POST',
-   headers:{'Content-Type':'application/json'},
+   method:"POST",
+   headers:{"Content-Type":"application/json"},
    body:JSON.stringify(data)
   });
+
  }catch(err){
-  console.log('Sheets error', err);
+  console.log(err);
  }
 
 }
 
 function bookWash(){
 
- const name = document.getElementById('name').value;
- const email = document.getElementById('email').value;
- const size = document.getElementById('carSize').value;
- const service = document.getElementById('serviceType').value;
+ const name=document.getElementById("name").value;
+ const email=document.getElementById("email").value;
+ const size=document.getElementById("carSize").value;
+ const service=document.getElementById("serviceType").value;
 
- if(!name || !email || !size || !service || selectedStart === null){
-  alert('Please fill all fields and select a time');
+ if(!name||!email||!size||!service||selectedStart===null){
+  alert("Please complete all fields and select a time.");
   return;
  }
 
- const duration = durations[size][service];
- const end = selectedStart + duration;
+ const duration=durations[size][service];
+ const end=selectedStart+duration;
 
- const bookings = getBookings();
+ const bookings=getBookings();
 
- for(const b of bookings){
-  if(!(end <= b.start || selectedStart >= b.end)){
-   alert('This time overlaps another booking');
-   return;
-  }
- }
+ bookings.push({start:selectedStart,end:end});
 
- const bookingData = {
+ saveBookings(bookings);
+
+ const bookingData={
   name:name,
   email:email,
   size:size,
@@ -193,20 +218,16 @@ function bookWash(){
   price:prices[size][service]
  };
 
- bookings.push({start:selectedStart,end:end});
-
- saveBookings(bookings);
-
  sendToSheets(bookingData);
 
- const link = paymentLinks[size][service];
+ const link=paymentLinks[size][service];
 
- if(link === "PASTE_LINK"){
-  alert('Add your payment link first');
+ if(link==="PASTE_LINK"){
+  alert("Add your payment link first");
   return;
  }
 
- window.location.href = link;
+ window.location.href=link;
 
 }
 
